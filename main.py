@@ -3,6 +3,7 @@ import json
 import gradio as gr
 from openai import OpenAI
 from dotenv import load_dotenv
+from safety import sanitize_or_block
 
 load_dotenv()
 client = OpenAI()
@@ -31,27 +32,35 @@ def generate_cli_advanced(user_instruction):
         )
         
         raw_output = response.choices[0].message.content.strip()
-        
+
         try:
             data = json.loads(raw_output)
-            
+
             # עיבוד תהליך החשיבה מתוך תתי-השדות ב-JSON
             thought_data = data.get("thoughtProcess", {})
-            thought_steps = (
-                f"1. ניתוח: {thought_data.get('step1_analysis', '-')}\n"
-                f"2. סביבה: {thought_data.get('step2_environment', '-')}\n"
+            thought_steps_list = [
+                f"1. ניתוח: {thought_data.get('step1_analysis', '-')}",
+                f"2. סביבה: {thought_data.get('step2_environment', '-')}",
                 f"3. אבטחה: {thought_data.get('step3_safety_check', '-')}"
-            )
-            
+            ]
+            thought_steps = "\n".join(thought_steps_list)
+
             shell = data.get("selectedShell", "unknown").upper()
             command = data.get("command", "")
+
+            # בדיקות אבטחה בסיסיות
+            blocked, cleaned_or_msg = sanitize_or_block(command)
+            if blocked:
+                return thought_steps, "BLOCKED", cleaned_or_msg, f"{data.get('confidenceScore', '-')}/10", data.get('riskLevel', 'RED'), "False"
+
             confidence = f"{data.get('confidenceScore', '-')}/10"
             risk = data.get("riskLevel", "unknown").upper()
             compliance = "מאושר (True)" if data.get("compliance") else "חסום (False)"
-            
-            return thought_steps, shell, command, confidence, risk, compliance
-            
+
+            return "\n".join(thought_steps), shell, cleaned_or_msg, confidence, risk, compliance
+
         except json.JSONDecodeError:
+            # החזרת פלט ידידותי לשגיאה שניתן לתעד בגיליון
             return "שגיאה: הפלט אינו JSON תקין", "ERROR", raw_output, "0/10", "RED", "False"
 
     except Exception as e:

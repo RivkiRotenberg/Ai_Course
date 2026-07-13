@@ -9,3 +9,6 @@ dependencies = [
     "openai>=2.38.0",
     "python-dotenv>=1.2.2",
 ]
+
+[tool.uv]
+project = "cli-agent"
